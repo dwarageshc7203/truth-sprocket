@@ -36,28 +36,73 @@ const AIDetector = () => {
     const startTime = Date.now();
     
     try {
-      // Initialize the text classification pipeline for AI detection
+      // Initialize AI detection pipeline using a model trained for AI-generated text detection
       const classifier = await pipeline(
         'text-classification',
-        'microsoft/DialoGPT-medium',
+        'Hello-SimpleAI/chatgpt-detector-roberta',
         { device: 'webgpu' }
       );
 
-      // Simulate AI detection analysis
-      const mockAnalysis = {
-        confidence: Math.random() * 100,
-        isAI: Math.random() > 0.5,
-        details: 'Analysis based on linguistic patterns, repetitive structures, and semantic consistency.',
+      // Perform actual AI content detection
+      const result = await classifier(content) as Array<{label: string, score: number}>;
+      
+      // Extract confidence and prediction from the model
+      const aiLabel = result.find((r) => r.label === 'LABEL_1' || r.label === 'AI');
+      const humanLabel = result.find((r) => r.label === 'LABEL_0' || r.label === 'HUMAN');
+      
+      const aiScore = aiLabel ? aiLabel.score * 100 : 0;
+      const humanScore = humanLabel ? humanLabel.score * 100 : 100 - aiScore;
+      
+      const isAI = aiScore > humanScore;
+      const confidence = Math.max(aiScore, humanScore);
+      
+      // Generate detailed analysis
+      let details = '';
+      if (isAI) {
+        if (confidence > 90) {
+          details = 'High confidence AI detection: Strong indicators of machine-generated patterns, repetitive structures, and unnatural language flow.';
+        } else if (confidence > 70) {
+          details = 'Moderate confidence AI detection: Some patterns suggest machine generation, but human elements are present.';
+        } else {
+          details = 'Low confidence AI detection: Mixed signals detected, could be AI-assisted or heavily edited human content.';
+        }
+      } else {
+        if (confidence > 90) {
+          details = 'High confidence human content: Natural language patterns, varied sentence structures, and authentic human expression detected.';
+        } else if (confidence > 70) {
+          details = 'Moderate confidence human content: Mostly human patterns with some regularities that could indicate editing tools.';
+        } else {
+          details = 'Low confidence human content: Content shows mixed characteristics between human and AI generation.';
+        }
+      }
+
+      return {
+        confidence,
+        isAI,
+        details,
         processingTime: Date.now() - startTime
       };
-
-      return mockAnalysis;
     } catch (error) {
-      // Fallback analysis if Transformers.js fails
+      console.error('AI detection failed:', error);
+      
+      // Fallback to heuristic analysis
+      const words = content.split(' ');
+      const avgWordLength = words.reduce((sum, word) => sum + word.length, 0) / words.length;
+      const uniqueWords = new Set(words.map(word => word.toLowerCase())).size;
+      const lexicalDiversity = uniqueWords / words.length;
+      
+      // Simple heuristics for AI detection
+      const repetitionScore = (words.length - uniqueWords) / words.length * 100;
+      const lengthScore = avgWordLength > 6 ? 20 : avgWordLength < 4 ? 60 : 40;
+      const diversityScore = lexicalDiversity < 0.4 ? 70 : lexicalDiversity > 0.8 ? 20 : 45;
+      
+      const aiProbability = (repetitionScore + lengthScore + diversityScore) / 3;
+      const isAI = aiProbability > 50;
+      
       return {
-        confidence: Math.random() * 100,
-        isAI: Math.random() > 0.5,
-        details: 'Fallback analysis completed using alternative detection methods.',
+        confidence: aiProbability,
+        isAI,
+        details: `Heuristic analysis based on lexical diversity (${(lexicalDiversity * 100).toFixed(1)}%), average word length (${avgWordLength.toFixed(1)}), and repetition patterns. ${isAI ? 'Patterns suggest AI generation.' : 'Patterns suggest human authorship.'}`,
         processingTime: Date.now() - startTime
       };
     }
